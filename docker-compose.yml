@@ -1,0 +1,100 @@
+version: "3"
+
+services:
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+    - '2181:2181'
+    networks:
+      - iotnet
+    volumes:
+    - 'zookeeper_data:/bitnami'
+    environment:
+    - ALLOW_ANONYMOUS_LOGIN=yes
+  kafka:
+    image: bitnami/kafka:latest
+    hostname: kafka
+    container_name: kafka
+    ports:
+    - 9092:9092
+    - 9093:9093
+    - 29092:29092
+    networks:
+      - iotnet
+    depends_on:
+      - zookeeper
+    volumes:
+    - 'kafka_data:/bitnami'
+    environment:
+    - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    - KAFKA_BROKER_ID=1
+    - KAFKA_LOG_RETENTION_HOURS=1
+    - ALLOW_PLAINTEXT_LISTENER=yes
+    - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+    - KAFKA_INTER_BROKER_LISTENER_NAME=INSIDE
+    - KAFKA_ADVERTISED_LISTENERS= INSIDE://localhost:9092, OUTSIDE://kafka:29092
+    - KAFKA_LISTENERS= INSIDE://0.0.0.0:9092, OUTSIDE://kafka:29092
+  elasticsearch:
+    image: elasticsearch:7.7.0
+    container_name: elasticsearch
+    hostname: elasticsearch
+    environment:
+      - "discovery.type=single-node"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - iotnet
+  kibana:
+    image: kibana:7.7.0
+    container_name: kibana
+    hostname: kibana
+    ports:
+      - "5601:5601"
+    links:
+      - elasticsearch:elasticsearch
+    depends_on:
+      - elasticsearch
+    networks:
+      - iotnet
+  logstash:
+    image: logstash:7.7.0
+    container_name: logstash
+    hostname: logstash
+    ports:
+      - "9600:9600"
+      - "8089:8089"
+    volumes:
+      - ./logstash:/usr/share/logstash/pipeline/
+    links:
+      - elasticsearch:elasticsearch
+      - kafka:kafka
+    depends_on:
+      - elasticsearch
+      - kafka
+    networks:
+      - iotnet
+  producer:
+    build:
+      context: ./producer
+    container_name: producer
+    restart: always
+    ports:
+      - "8000:8000"
+    networks:
+      - iotnet
+    depends_on:
+      - kafka
+    links:
+      - kafka
+networks:
+  iotnet:
+    driver: bridge
+volumes:
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
+  
